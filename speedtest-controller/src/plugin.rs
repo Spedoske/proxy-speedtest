@@ -11,7 +11,7 @@ use thiserror::Error;
 pub enum PluginError {
     #[error("json-rpc client error")]
     ClientError(#[from] jsonrpsee::core::ClientError),
-    #[error("JSON RPC returns an invalid response")]
+    #[error("json-rpc returns an invalid response")]
     APIBadResponse(#[from] serde_json::Error),
     #[error("Unable to parse the url")]
     ParseError(#[from] url::ParseError),
@@ -34,7 +34,7 @@ pub struct PluginMetaData {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct TestDescriptor {
     pub name: String,
 }
@@ -80,20 +80,16 @@ impl_into_response!(ConnectionDescriptor);
 
 #[async_trait]
 pub trait Plugin {
-    async fn configure(
-        &mut self,
-        proxy: serde_json::Value,
-        config: serde_json::Value,
-    ) -> Result<ConnectionDescriptor>;
+    async fn configure(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor>;
     async fn metadata(&self) -> Result<PluginMetaData>;
     async fn tests(&self) -> Result<Vec<TestDescriptor>>;
     async fn run_test(
-        &mut self,
+        &self,
         test: &TestDescriptor,
         proxy: &ConnectionDescriptor,
     ) -> Result<serde_json::Value>;
     async fn data_transforms(&self) -> Result<Vec<DataTransformDescriptor>>;
-    async fn parse_protocol(&self, connection_string: &str) -> Result<Option<ProtocolDescriptor>>;
+    async fn parse_protocol(&self, connection_string: &str) -> Result<Vec<ProtocolDescriptor>>;
 }
 
 #[async_trait]
@@ -102,12 +98,8 @@ where
     T: std::ops::Deref<Target = ImplPlugin> + Send + Sync,
     ImplPlugin: Plugin + Send + Sync,
 {
-    async fn configure(
-        &mut self,
-        proxy: serde_json::Value,
-        config: serde_json::Value,
-    ) -> Result<ConnectionDescriptor> {
-        self.deref().configure(proxy, config).await
+    async fn configure(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor> {
+        self.deref().configure(proxy).await
     }
     async fn metadata(&self) -> Result<PluginMetaData> {
         self.deref().metadata().await
@@ -116,7 +108,7 @@ where
         self.deref().tests().await
     }
     async fn run_test(
-        &mut self,
+        &self,
         test: &TestDescriptor,
         proxy: &ConnectionDescriptor,
     ) -> Result<serde_json::Value> {
@@ -125,7 +117,7 @@ where
     async fn data_transforms(&self) -> Result<Vec<DataTransformDescriptor>> {
         self.deref().data_transforms().await
     }
-    async fn parse_protocol(&self, connection_string: &str) -> Result<Option<ProtocolDescriptor>> {
+    async fn parse_protocol(&self, connection_string: &str) -> Result<Vec<ProtocolDescriptor>> {
         self.deref().parse_protocol(connection_string).await
     }
 }

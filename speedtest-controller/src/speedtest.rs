@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::future::join_all;
+use futures::Future;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
@@ -9,12 +10,12 @@ use tokio::process::{Child, Command};
 use url::Url;
 
 use crate::plugin::json_rpc::JSONRPCPlugin;
-use crate::plugin::{Plugin, PluginType};
+use crate::plugin::{Plugin, PluginType, ProtocolDescriptor, TestDescriptor};
 use crate::plugin_loader::{PluginLoaderError, Result};
 use crate::process::create_process_and_wait_for_pattern;
 
 #[derive(Debug, Deserialize)]
-struct PluginConfig {
+pub struct PluginConfig {
     /// Available format:
     /// ```
     /// docker://image:tag
@@ -28,17 +29,47 @@ struct PluginConfig {
     config: Value,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    plugins: HashMap<String, PluginConfig>,
+type PluginMap = HashMap<String, Arc<dyn Plugin>>;
+type ProxyProviderMap = HashMap<String, (Arc<dyn Plugin>, Vec<ProtocolDescriptor>)>;
+type TestProviderMap = HashMap<String, (Arc<dyn Plugin>, Vec<TestDescriptor>)>;
+
+async fn get_provider_map<Content, F, FR, Args, Err>(
+    plugin_map: &PluginMap,
+    transform: F,
+    args: &Args,
+) -> HashMap<String, (Arc<dyn Plugin>, Vec<Content>)>
+where
+    Args: Clone,
+    FR: Future<Output = std::result::Result<Vec<Content>, Err>>,
+    F: Fn(String, Arc<dyn Plugin>, Args) -> FR,
+{
+    let providers: Vec<(_, _, _)> = join_all(plugin_map.clone().into_iter().map(
+        |(plugin_name, plugin)| async {
+            (
+                plugin_name.clone(),
+                plugin.clone(),
+                (transform(plugin_name, plugin, args.clone())).await,
+            )
+        },
+    ))
+    .await;
+
+    providers
+        .into_iter()
+        .filter_map(|(plugin_name, plugin, result)| match result {
+            Ok(vec) => Some((plugin_name, (plugin, vec))),
+            Err(_) => None,
+        })
+        .collect()
 }
 
 pub struct SpeedTest {
-    plugin_map: HashMap<String, Arc<dyn Plugin>>,
+    plugin_map: PluginMap,
 }
 
 struct FileJSONRPCPlugin {
     inner: JSONRPCPlugin,
+    #[allow(dead_code)]
     process: Child,
 }
 
@@ -60,7 +91,7 @@ async fn load_json_rpc_plugin(config: PluginConfig) -> Result<Arc<dyn Plugin>> {
                     endpoint.to_owned()
                 })
                 .await;
-            let inner = JSONRPCPlugin::new(&endpoint).await?;
+            let inner = JSONRPCPlugin::new(&endpoint, config.config).await?;
             Ok(Arc::new(FileJSONRPCPlugin { inner, process }))
         }
         _ => Err(PluginLoaderError::UnexpectedScheme(config.source.into())),
@@ -68,9 +99,9 @@ async fn load_json_rpc_plugin(config: PluginConfig) -> Result<Arc<dyn Plugin>> {
 }
 
 impl SpeedTest {
-    pub async fn new(c: Config) -> Self {
+    pub async fn new(plugins: HashMap<String, PluginConfig>) -> Self {
         let plugin_map: Vec<(_, _)> = join_all(
-            c.plugins
+            plugins
                 .into_iter()
                 .map(|(k, v)| async { (k, load_json_rpc_plugin(v).await) }),
         )
@@ -89,6 +120,27 @@ impl SpeedTest {
                 }
             })
             .collect();
+
         SpeedTest { plugin_map }
+    }
+
+    pub async fn get_proxy_provider(&self, connection_string: &str) -> ProxyProviderMap {
+        get_provider_map(
+            &self.plugin_map,
+            |_, plugin, connection_string| async move {
+                plugin.parse_protocol(&connection_string).await
+            },
+            &connection_string.to_owned(),
+        )
+        .await
+    }
+
+    pub async fn get_test_provider(&self) -> TestProviderMap {
+        get_provider_map(
+            &self.plugin_map,
+            |_, plugin, _| async move { plugin.tests().await },
+            &(),
+        )
+        .await
     }
 }

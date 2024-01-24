@@ -2,22 +2,20 @@ use jsonrpsee::async_client::ClientBuilder;
 use jsonrpsee::client_transport::ws::{Url, WsTransportClientBuilder};
 use jsonrpsee::rpc_params;
 use jsonrpsee::{async_client::Client, core::client::ClientT};
+use serde_json::Value;
 
 use super::{ConnectionDescriptor, Plugin, Result, TestDescriptor};
 pub struct JSONRPCPlugin {
     client: Client,
+    config: Value,
 }
 
 #[async_trait::async_trait]
 impl Plugin for JSONRPCPlugin {
-    async fn configure(
-        &mut self,
-        proxy: serde_json::Value,
-        config: serde_json::Value,
-    ) -> Result<ConnectionDescriptor> {
+    async fn configure(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor> {
         let result = self
             .client
-            .request("configure", rpc_params![proxy, config])
+            .request("configure", rpc_params![proxy, &self.config])
             .await?;
         Ok(serde_json::from_value(result)?)
     }
@@ -33,7 +31,7 @@ impl Plugin for JSONRPCPlugin {
     }
 
     async fn run_test(
-        &mut self,
+        &self,
         test: &TestDescriptor,
         proxy: &ConnectionDescriptor,
     ) -> Result<serde_json::Value> {
@@ -55,7 +53,7 @@ impl Plugin for JSONRPCPlugin {
     async fn parse_protocol(
         &self,
         connection_string: &str,
-    ) -> Result<Option<super::ProtocolDescriptor>> {
+    ) -> Result<Vec<super::ProtocolDescriptor>> {
         let result = self
             .client
             .request("parse_protocol", rpc_params![connection_string])
@@ -65,12 +63,12 @@ impl Plugin for JSONRPCPlugin {
 }
 
 impl JSONRPCPlugin {
-    pub async fn new(endpoint: &str) -> Result<Self> {
+    pub async fn new(endpoint: &str, config: Value) -> Result<Self> {
         let uri = Url::parse(&format!("ws://{}", endpoint))?;
 
         let (tx, rx) = WsTransportClientBuilder::default().build(uri).await?;
         let client: Client = ClientBuilder::default().build_with_tokio(tx, rx);
-        Ok(JSONRPCPlugin { client })
+        Ok(JSONRPCPlugin { client, config })
     }
 }
 
@@ -117,7 +115,9 @@ mod tests {
     #[tokio::test]
     async fn it_works() {
         let addr = create_rpc_service().await.unwrap();
-        let mut plugin = JSONRPCPlugin::new(&format!("{}", addr)).await.unwrap();
+        let plugin = JSONRPCPlugin::new(&format!("{}", addr), Value::Null)
+            .await
+            .unwrap();
         assert_eq!(plugin.metadata().await.unwrap().name, "foo");
         plugin
             .configure(
@@ -127,7 +127,6 @@ mod tests {
                     tun: false,
                 })
                 .unwrap(),
-                serde_json::Value::Null,
             )
             .await
             .unwrap();
@@ -136,14 +135,13 @@ mod tests {
     #[tokio::test]
     async fn it_works_on_gost() {
         let addr = "127.0.0.1:54040";
-        let mut plugin = JSONRPCPlugin::new(&format!("{}", addr)).await.unwrap();
+        let plugin = JSONRPCPlugin::new(&format!("{}", addr), Value::Null)
+            .await
+            .unwrap();
         println!("{}", plugin.metadata().await.unwrap().name);
         println!(
             "{:?}",
-            plugin
-                .configure(serde_json::Value::Null, serde_json::Value::Null)
-                .await
-                .unwrap()
+            plugin.configure(serde_json::Value::Null).await.unwrap()
         );
     }
 }
