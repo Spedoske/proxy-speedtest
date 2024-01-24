@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "speedtest-controller",
+    "speedtest-plugins",
+]
+resolver = "2"

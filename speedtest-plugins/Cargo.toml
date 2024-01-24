@@ -1,0 +1,22 @@
+[package]
+name = "speedtest-plugins"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.79"
+jsonrpsee = {version = "0.21.0", features = ["server"]}
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+speedtest-controller = {path = "../speedtest-controller"}
+regex = "1.10.3"
+
+[dev-dependencies]
+jsonrpsee = {version = "0.21.0", features = ["client", "server"]}
+
+
+[[bin]]
+name = "plugin-hello"
