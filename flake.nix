@@ -17,12 +17,14 @@
       {
         devShells.default = mkShell {
           buildInputs = [
-            rust-bin.nightly.latest.default
+            (rust-bin.nightly.latest.default.override {
+              extensions = [ "rust-src" ];
+            })
             git
             gost
           ] ++ (if lib.strings.hasSuffix "darwin" system then [
             darwin.apple_sdk.frameworks.Security
-          ] else []);
+          ] else [ ]);
         };
         formatter = nixpkgs.legacyPackages.${system}.nixpkgs-fmt;
       });
