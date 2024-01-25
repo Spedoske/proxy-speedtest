@@ -8,13 +8,35 @@ use tokio::{
 };
 use tokio_util::codec::{FramedRead, LinesCodec};
 
+/// Creates a process using the given `Command`, waits for a pattern to match in the process output,
+/// and returns the transformed output and the child process.
+///
+/// # Arguments
+///
+/// * `c` - The `Command` used to create the process.
+/// * `re` - The regular expression pattern to match in the process output.
+/// * `transform` - A closure that transforms the captured groups from the pattern match into the desired output.
+///
+/// # Generic Parameters
+///
+/// * `const N: usize` - The number of captured groups expected from the pattern match.
+/// * `T` - The type of the transformed output.
+/// * `Output` - The type of the transformed output.
+///
+/// # Returns
+///
+/// Returns a tuple containing the transformed output and the child process.
+///
+/// # Panics
+///
+/// Panics if the process does not give any output that matches the specified regular expression pattern.
 pub async fn create_process_and_wait_for_pattern<const N: usize, T, Output>(
     mut c: Command,
     re: Regex,
     transform: T,
 ) -> (Output, Child)
 where
-    T: (FnOnce([&str; N]) -> Output),
+    T: FnOnce([&str; N]) -> Output,
 {
     let mut process = c
         .stdout(Stdio::piped())

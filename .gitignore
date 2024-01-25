@@ -2,3 +2,4 @@
 .direnv/
 .envrc
 **/*.yaml
+**/.DS_Store
