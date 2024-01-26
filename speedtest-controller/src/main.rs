@@ -59,46 +59,44 @@ async fn main() -> anyhow::Result<()> {
                                             );
                                             None
                                         }
-                                        Ok(proxy_connection) =>
-                                            Some((
-                                                proxy.name.clone(),
-                                                stream
-                                                    ::iter(test_providers.iter())
-                                                    .then(|(test_provider, (plugin, tests))| {
-                                                        let proxy_connection = &proxy_connection;
-                                                        async move {
-                                                            (
-                                                                test_provider.clone(),
-                                                                stream
-                                                                    ::iter(tests)
-                                                                    .filter_map(|test| async move {
-                                                                        let test_result =
-                                                                            plugin.run_test(
-                                                                                test,
-                                                                                proxy_connection
-                                                                            ).await;
-                                                                        match test_result {
-                                                                            Ok(p) =>
-                                                                                Some((
-                                                                                    test.name.clone(),
-                                                                                    p,
-                                                                                )),
-                                                                            Err(e) => {
-                                                                                log::error!(
-                                                                                    "Failed to run test {test:?} given {proxy_connection:?}. {e}"
-                                                                                );
-                                                                                None
-                                                                            }
-                                                                        }
-                                                                    })
-                                                                    .collect::<
-                                                                        HashMap<_, _>
-                                                                    >().await,
-                                                            )
+                                        
+                                        Ok(proxy_connection) => {
+                                            // Initialize a HashMap to store results for each test provider.
+                                            let mut all_test_results = HashMap::new();
+                                        
+                                            // Iterate over each test provider along with their plugins and tests.
+                                            for (test_provider, (plugin, tests)) in test_providers.iter() {
+                                                // Initialize a HashMap to store results for each test.
+                                                let mut test_results = HashMap::new();
+                                        
+                                                // Iterate over each test.
+                                                for test in tests {
+                                                    // Attempt to run the test, handling potential errors with '?'
+                                                    // Errors are logged and the failed test is skipped.
+                                                    let test_result = plugin.run_test(test, &proxy_connection).await;
+                                                    match test_result {
+                                                        Ok(p) => {
+                                                            // On success, store the test result.
+                                                            test_results.insert(test.name.clone(), p);
                                                         }
-                                                    })
-                                                    .collect::<HashMap<_, _>>().await,
-                                            )),
+                                                        Err(e) => {
+                                                            // Log the error and skip this test.
+                                                            log::error!(
+                                                                "Failed to run test {test:?} given {proxy_connection:?}. {e}"
+                                                            );
+                                                            continue;
+                                                        }
+                                                    }
+                                                }
+                                        
+                                                // Store the results for this test provider.
+                                                all_test_results.insert(test_provider.clone(), test_results);
+                                            }
+                                        
+                                            // Return the proxy name and all the test results.
+                                            Some((proxy.name.clone(), all_test_results))
+                                        }
+                                        
                                     }
                                 }
                             })
