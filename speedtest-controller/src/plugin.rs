@@ -23,8 +23,6 @@ pub enum PluginError {
     ParseError(#[from] url::ParseError),
     #[error("Unable to perform the ws handshake")]
     WsHandshakeError(#[from] WsHandshakeError),
-    #[error("unknown data store error")]
-    Unknown,
 }
 
 /// An enum representing the type of a plugin.
@@ -94,7 +92,7 @@ impl_into_response!(ConnectionDescriptor);
 
 /// The `Plugin` trait defines the interface for a plugin that can be used in the speedtest controller.
 #[async_trait]
-pub trait Plugin {
+pub trait Plugin: Send + Sync {
     /// Configures the plugin with the given proxy configuration.
     async fn configure(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor>;
 
@@ -122,7 +120,7 @@ pub trait Plugin {
 impl<T, ImplPlugin> Plugin for T
 where
     T: std::ops::Deref<Target = ImplPlugin> + Send + Sync,
-    ImplPlugin: Plugin + Send + Sync,
+    ImplPlugin: Plugin,
 {
     async fn configure(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor> {
         self.deref().configure(proxy).await

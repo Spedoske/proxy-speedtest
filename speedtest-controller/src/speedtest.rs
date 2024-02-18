@@ -29,9 +29,9 @@ pub struct PluginConfig {
     config: Value,
 }
 
-type PluginMap = HashMap<String, Arc<dyn Plugin>>;
-type ProxyProviderMap = HashMap<String, (Arc<dyn Plugin>, Vec<ProtocolDescriptor>)>;
-type TestProviderMap = HashMap<String, (Arc<dyn Plugin>, Vec<TestDescriptor>)>;
+pub type PluginMap = HashMap<String, Arc<dyn Plugin>>;
+pub type ProxyProviderMap = HashMap<String, (Arc<dyn Plugin>, Vec<ProtocolDescriptor>)>;
+pub type TestProviderMap = HashMap<String, (Arc<dyn Plugin>, Vec<TestDescriptor>)>;
 
 async fn get_provider_map<Content, F, FR, Args, Err>(
     plugin_map: &PluginMap,
