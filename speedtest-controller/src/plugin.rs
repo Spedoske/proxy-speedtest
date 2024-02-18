@@ -94,7 +94,10 @@ impl_into_response!(ConnectionDescriptor);
 #[async_trait]
 pub trait Plugin: Send + Sync {
     /// Configures the plugin with the given proxy configuration.
-    async fn configure(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor>;
+    async fn setup_proxy(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor>;
+
+    /// Initialize the plugin
+    async fn init(&self) -> Result<()>;
 
     /// Retrieves the metadata associated with the plugin.
     async fn metadata(&self) -> Result<PluginMetaData>;
@@ -122,8 +125,12 @@ where
     T: std::ops::Deref<Target = ImplPlugin> + Send + Sync,
     ImplPlugin: Plugin,
 {
-    async fn configure(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor> {
-        self.deref().configure(proxy).await
+    async fn setup_proxy(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor> {
+        self.deref().setup_proxy(proxy).await
+    }
+
+    async fn init(&self) -> Result<()> {
+        self.deref().init().await
     }
 
     async fn metadata(&self) -> Result<PluginMetaData> {

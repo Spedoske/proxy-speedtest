@@ -86,11 +86,8 @@ async fn perform_speedtest_for_proxies(
                     None => None,
                     Some(proxy_connection) => Some((
                         proxy_name,
-                        collect_test_results_from_test_providers(
-                            test_providers.clone(),
-                            proxy_connection,
-                        )
-                        .await,
+                        collect_test_results_from_test_providers(test_providers, proxy_connection)
+                            .await,
                     )),
                 }
             }
@@ -105,11 +102,11 @@ async fn perform_speedtest_for_proxy_providers(
 ) -> HashMap<String, HashMap<String, HashMap<String, HashMap<String, Value>>>> {
     stream::iter(proxy_providers)
         .then(|(provider, (plugin, proxies))| {
-            let test_providers = &test_providers;
+            let test_providers = test_providers.clone();
             async move {
                 (
-                    provider.clone(),
-                    perform_speedtest_for_proxies(plugin, proxies, test_providers.clone()).await,
+                    provider,
+                    perform_speedtest_for_proxies(plugin, proxies, test_providers).await,
                 )
             }
         })
@@ -145,7 +142,7 @@ fn try_set_up_proxy(
     move |proxy| {
         let plugin = plugin.clone();
         async move {
-            let proxy_connection = plugin.configure(proxy.content).await;
+            let proxy_connection = plugin.setup_proxy(proxy.content).await;
             match proxy_connection {
                 Err(e) => {
                     log::error!("Cannot setup proxy. {e}");
@@ -161,6 +158,7 @@ fn try_set_up_proxy(
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
+    println!("{:?}", std::env::current_dir()?);
     let args = Args::parse();
     let settings = Config::builder()
         .add_source(config::File::with_name(&args.config))

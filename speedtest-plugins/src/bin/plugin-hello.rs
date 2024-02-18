@@ -33,16 +33,15 @@ async fn main() -> anyhow::Result<()> {
             content: serde_json::Value::Null,
         }])
     })?;
+    module.register_method("init", |params, _| {
+        println!("init with {:?}", params);
+    })?;
     {
-        module.register_async_method("configure", move |params, _| {
+        module.register_async_method("setup_proxy", move |params, _| {
             let hello_plugin = Arc::clone(&hello_plugin);
             async move {
-                let (params, plugin_config): (serde_json::Value, Option<HelloPluginConfig>) =
-                    params.parse()?;
+                let (params,): (serde_json::Value,) = params.parse()?;
                 assert_eq!(params, serde_json::Value::Null);
-                if let Some(value) = plugin_config {
-                    println!("Config string:{}", value.display_string);
-                }
                 let mut command = Command::new("gost");
                 command.arg("-L").arg("socks5://:0");
                 let re = Regex::new(r"socks5:\/\/:0 on \[::\]:(\d+)").unwrap();

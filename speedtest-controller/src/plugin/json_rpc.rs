@@ -12,10 +12,18 @@ pub struct JSONRPCPlugin {
 
 #[async_trait::async_trait]
 impl Plugin for JSONRPCPlugin {
-    async fn configure(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor> {
+    async fn init(&self) -> Result<()> {
         let result = self
             .client
-            .request("configure", rpc_params![proxy, &self.config])
+            .request("init", rpc_params![&self.config])
+            .await?;
+        Ok(serde_json::from_value(result)?)
+    }
+
+    async fn setup_proxy(&self, proxy: serde_json::Value) -> Result<ConnectionDescriptor> {
+        let result = self
+            .client
+            .request("setup_proxy", rpc_params![proxy])
             .await?;
         Ok(serde_json::from_value(result)?)
     }
@@ -91,7 +99,7 @@ mod tests {
             name: "foo".to_owned(),
         })?;
         module.register_method(
-            "configure",
+            "setup_proxy",
             |params, _| -> std::result::Result<_, ErrorObject> {
                 let params: (ConnectionDescriptor,) = params.parse()?;
                 println!("{:?}", params);
@@ -102,6 +110,9 @@ mod tests {
                 })
             },
         )?;
+        module.register_method("init", |params, _| {
+            println!("init with {:?}", params);
+        })?;
         let addr = server.local_addr()?;
 
         let handle = server.start(module);
@@ -120,7 +131,7 @@ mod tests {
             .unwrap();
         assert_eq!(plugin.metadata().await.unwrap().name, "foo");
         plugin
-            .configure(
+            .setup_proxy(
                 serde_json::to_value(ConnectionDescriptor {
                     http: Some("http://127.0.0.1:1234".to_owned()),
                     socks5: Some("socks5://127.0.0.1:2345".to_owned()),
@@ -141,7 +152,7 @@ mod tests {
         println!("{}", plugin.metadata().await.unwrap().name);
         println!(
             "{:?}",
-            plugin.configure(serde_json::Value::Null).await.unwrap()
+            plugin.setup_proxy(serde_json::Value::Null).await.unwrap()
         );
     }
 }
